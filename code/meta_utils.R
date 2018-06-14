@@ -11,7 +11,7 @@ require('metafor')
 require('miceadds')
 require('rjson')
 
-json_data <- fromJSON(paste(readLines("external_data/symbols-human.json"), collapse=""))
+json_data <- fromJSON(paste(readLines("../external_data/symbols-human.json"), collapse=""))
 json.df <- stack(json_data)
 head(json.df)
 colnames(json.df) <- c("key", "gene")
@@ -90,7 +90,7 @@ metaAnalyzeGene <- function(key, ds.list, method="DL"){
 
 extractStudyMI <- function(idx){
   print(idx)
-  load.Rdata(sprintf("data/processed/ds%s.RData", idx), "my.ds")
+  load.Rdata(sprintf("../data/processed/ds%s.RData", idx), "my.ds")
   
   # this is based on MetaIntegrator
   # dataset object contains:
@@ -122,7 +122,7 @@ extractStudy <- function(idx){
   # computes the effect sizes for that study
 
   print(idx)
-  load.Rdata(sprintf("data/processed/ds%s.RData", idx), "my.ds")
+  load.Rdata(sprintf("../data/processed/ds%s.RData", idx), "my.ds")
   # this is based on MetaIntegrator
   # dataset object contains:
   #   expr = expression matrix, rownames are probe IDs, colnames are samples

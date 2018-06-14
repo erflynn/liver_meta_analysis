@@ -35,8 +35,8 @@ require('illuminaio')
 loadAffyData <- function(cel.names, ID){
   covdesc <- data.frame(row.names = cel.names)
   covdesc$cov <- "n"
-  write.table(covdesc, file=sprintf("data/affy/%s/covdesc", ID), quote=FALSE)
-  raw.data <- read.affy(path = sprintf("data/affy/%s", ID))
+  write.table(covdesc, file=sprintf("../data/affy/%s/covdesc", ID), quote=FALSE)
+  raw.data <- read.affy(path = sprintf("../data/affy/%s", ID))
   x.rma <- call.exprs(raw.data, "rma") # always returns logged data --> I'm ok!
   myExpData <- exprs(x.rma)
   x.mas5 <- call.exprs(raw.data, "mas5")
@@ -84,7 +84,7 @@ loadBioconductorEntrez <- function(gpl){
 
 
 loadGPL11532EntrezAnnot <- function(){
-  gpl11532 <- getGEO(filename="data/affy/GPL11532.annot.gz")
+  gpl11532 <- getGEO(filename="../data/affy/GPL11532.annot.gz")
   colnames(Table(gpl11532))
   feat.labels <- data.frame(apply(Table(gpl11532)[,c("ID", "Gene ID")], c(1,2), as.character))
   feat.labelssep <- separate_rows(feat.labels[,c(1,2)], "Gene.ID", sep="///")
@@ -94,7 +94,7 @@ loadGPL11532EntrezAnnot <- function(){
 }
 
 loadGPL4133EntrezAnnot <- function(){
-  res <- read.delim("data/agilent/GPL4133-12599.txt", comment.char="#", header=TRUE, colClasses='character')
+  res <- read.delim("../data/agilent/GPL4133-12599.txt", comment.char="#", header=TRUE, colClasses='character')
   res.df <- res[,c("ID", "GENE")]
   id.to.gene <- split(res.df$GENE, res.df$ID)
   return(id.to.gene)

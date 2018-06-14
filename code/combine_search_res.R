@@ -5,11 +5,9 @@
 #
 # Combine search results and de-duplicate by ID.
 
-setwd("~/Documents/EMILY/Stanford/Coursework/stats211/project/")
-
 # load datasets
-array_exp <- read.delim("ArrayExpress-Experiments-180203-011011.txt")
-geo <- read.delim("liver_meta.tsv", colClasses = 'character') 
+array_exp <- read.delim("data/search_res/ArrayExpress-Experiments-180203-011011.txt")
+geo <- read.delim("data/search_res/geo_liver_meta.tsv", colClasses = 'character') 
 
 # extract GEO IDs
 gses <- sapply(geo$gse, function(x) length(strsplit(as.character(x), "E", fixed=TRUE)[[1]])==2)
@@ -30,4 +28,4 @@ colnames(gse.to.gpl) <- c("gse", "gpl")
 geo.filt2 <- unique(geo.filt[,1:2])
 geo.filt3 <- merge(geo.filt2, gse.to.gpl)
 
-write.table(geo.filt3, file="liver_meta_geo_only.tsv", sep="\t", quote=FALSE, row.names=FALSE)
+write.table(geo.filt3, file="data/annot/liver_meta_geo_only.tsv", sep="\t", quote=FALSE, row.names=FALSE)

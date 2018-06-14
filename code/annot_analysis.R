@@ -4,22 +4,17 @@
 # Updated: 6/14/218
 #
 # Code for examining annotation results
-# TODO:
-#   - PRISMA flow diagram
+# Notes:
 #   - breakdown of samples with multiple criteria?
-#   - annotate with array
-# FUTURE: pull down abstracts + PMIDs too! there is a tool that does this
-#   - multiple criteria
+#   - pull down abstracts + PMIDs too! there is a tool that does this
 #   - first pass filtering based on array? title keywords? something else?
 #   - count number filtered by title, number filtered by abstract, paper, etc... - when was this done
 
 require('xlsx')
 
-setwd("~/Documents/EMILY/Stanford/Coursework/stats211/project/")
-
-# load datasets
-array_exp <- read.xlsx("ArrayExpress-Experiments_annot.xlsx", 1)
-geo <- read.delim("liver_meta_geo_only.tsv", header=TRUE)
+# load annotated datasets
+array_exp <- read.xlsx("data/annot/ArrayExpress-Experiments_annot.xlsx", 1)
+geo <- read.delim("data/annot/liver_meta_geo_only.tsv", header=TRUE)
 
 # put these together
 convertArrayExpToGeoID <- function(acc){
@@ -42,7 +37,7 @@ combined_ds <- rbind(array_exp_sm, geo_sm)
 
 
 ### now upload the updated annotations
-keep.reannot <- read.xlsx("studies_to_keep.xlsx", 1)
+keep.reannot <- read.xlsx("data/annot/studies_to_keep.xlsx", 1)
 keep.reannot$Accession <- sapply(keep.reannot$Accession, function(x) convertArrayExpToGeoID(x))
 
 # update based on this info
@@ -60,8 +55,9 @@ fixed.tab <- fixed.tab[!duplicated(fixed.tab$Accession),]
 
 # convert Keep to lowercase
 fixed.tab$Keep <- sapply(fixed.tab$Keep, function(x) trimws(tolower(as.character(x))))
-## write this out
-write.table(fixed.tab, file="final_annot.tsv", sep="\t", row.names=FALSE, quote=FALSE)
+
+## write this out --> this is the properly annotated data
+write.table(fixed.tab, file="data/annot/final_annot.tsv", sep="\t", row.names=FALSE, quote=FALSE)
 
 
 # look at the breakdown of excluded entries
@@ -105,3 +101,39 @@ lbls <- names(simplified.tab)
 lbls <- sapply(1:length(lbls), function(i) 
   paste(c(lbls[i], "(",slices[i], ")"), collapse="")) 
 pie(slices, labels=lbls, col=rainbow(length(lbls)), cex=0.75)
+
+
+# look at drug stuff
+a.keep <- array_exp[grepl("^Yes", array_exp$Keep),]
+g.keep <- geo[grepl("^yes", geo$keep),]
+
+a.maybe <- array_exp[grepl("^Maybe", array_exp$Keep),]
+g.maybe <- geo[grepl("^maybe", geo$keep),]
+
+a.no <- array_exp[grepl("^No", array_exp$Keep),]
+g.no <- geo[grepl("^no", geo$keep),]
+
+
+levels(a.no$Exclusion.criteria)
+levels(g.no$exclusion.criteria)
+exclusion <- c(sapply(g.no$exclusion.criteria, as.character), sapply(a.no$Exclusion.criteria, as.character))
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+
+exclusion <- sapply(exclusion, trim)
+table(exclusion)
+
+# count which ones are not included and why
+par(mar=c(8, 4, 4, 2))
+barplot(table(exclusion)[order(-table(exclusion))][table(exclusion)>2], las=2, main="Excluded samples")
+
+a.drug <- array_exp[grepl("^drug", array_exp$Notes),]
+g.drug <- geo[grepl("^drug", geo$notes),]
+
+colnames(g.drug[,1:7])
+colnames(a.drug[,1:7])
+g.drug2 <- g.drug[,c(1:4, 7, 5:6)]
+colnames(g.drug2) <- colnames(a.drug[,1:7])
+drug.df <- rbind(a.drug[,1:7], g.drug2)
+
+## write out the drug data 
+write.table(drug.df, file="data/annot/drug_exposures.tsv", sep="\t", row.names=FALSE, quote=FALSE)
