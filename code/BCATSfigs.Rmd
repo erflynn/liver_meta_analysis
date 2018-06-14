@@ -1,0 +1,219 @@
+---
+title: "BCATS Figures"
+author: "E Flynn"
+date: "4/18/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require('ggplot2')
+source("meta_utils.R")
+
+```
+
+## R Markdown
+
+PRISMA flow diagram
+```{r}
+
+```
+
+
+Excluded studies - breakdown of reasons why
+```{r}
+
+```
+
+
+Pretty table - genes that are DE
+```{r}
+siggenesMA <- read.csv("/Users/eflynn/Documents/EMILY/Stanford/Coursework/stats211/project/results/sigTabBCATS2.csv")
+siggenesMA2 <- siggenesMA[siggenesMA$validated=="TRUE",]
+siggenesMA <- siggenesMA2
+# ### - IGNORE - ###
+# ## fill in missing manually
+# siggenesMA$chrom <- sapply(siggenesMA$chrom, as.character)
+# siggenesMA$gene.symbol <- sapply(siggenesMA$gene.symbol, as.character)
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==391777,]$gene.symbol <- "RPS4XP6"
+# siggenesMA[siggenesMA$ENTREZ.ID==391777,]$chrom <- "5"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==283120,]$gene.symbol <- "H19"
+# siggenesMA[siggenesMA$ENTREZ.ID==283120,]$chrom <- "11"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==246126,]$gene.symbol <- "TXLNGY"
+# siggenesMA[siggenesMA$ENTREZ.ID==246126,]$chrom <- "Y"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==401577,]$gene.symbol <- "CD99P1"
+# siggenesMA[siggenesMA$ENTREZ.ID==401577,]$chrom <- "XY" # PAR
+# 
+# ## todo
+# siggenesMA[siggenesMA$ENTREZ.ID==642236,]$gene.symbol <- "FRG1JP"
+# siggenesMA[siggenesMA$ENTREZ.ID==642236,]$chrom <- "9"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==154,]$gene.symbol <- "ADRB2"
+# siggenesMA[siggenesMA$ENTREZ.ID==154,]$chrom <- "5"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==84663,]$gene.symbol <- "CYorf15B"
+# siggenesMA[siggenesMA$ENTREZ.ID==84663,]$chrom <- "Y"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==653048,]$gene.symbol <- "XAGE1C"
+# siggenesMA[siggenesMA$ENTREZ.ID==653048,]$chrom <- "X" # discontinued!
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==150378,]$gene.symbol <- "FLJ30901"
+# siggenesMA[siggenesMA$ENTREZ.ID==150378,]$chrom <- "22"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==202299,]$gene.symbol <- "LINC01554"
+# siggenesMA[siggenesMA$ENTREZ.ID==202299,]$chrom <- "5"
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==389538,]$gene.symbol <- "CCZ1P-OR7E38P"
+# siggenesMA[siggenesMA$ENTREZ.ID==389538,]$chrom <- "7"
+# 
+# # what about PAR genes?
+# siggenesMA[siggenesMA$chrom=="X" & siggenesMA$beta > 0,]
+# # CD99 is in the PAR region
+# 
+# siggenesMA[siggenesMA$ENTREZ.ID==4267,]$chrom <- "XY"
+
+```
+
+
+
+```{r}
+siggenes.o <- siggenesMA[order(siggenesMA$beta),]
+chromLoc <- ifelse(siggenes.o$chr =="Y", "red", ifelse(siggenes.o$chr=="X","blue", ifelse(siggenes.o$chr=="XY", "purple", "gray")))
+
+barplot(siggenes.o$beta, col=chromLoc, ylim=c(-10, 20), ylab="std mean diff (m - f)")
+#legend("top", legend=c("X", "Y","PAR", "autosomes"), col=c("blue", "red", "purple", "gray"), lty=1, cex=0.9, title="chromosome") # bleh legends
+
+```
+
+List of genes that are DE
+```{r}
+dmets <- read.csv("~/Documents/EMILY/Stanford/Coursework/stats211/project/dmets.csv", colClasses="character")
+dmets[(dmets$Gene.Symbol=="SOD1"),]
+siggenesMA[siggenesMA$gene %in% dmets$Gene.Symbol,] # SOD1 (f), GPX3 (m), CYP3A7 (f)
+# SOD1 = superoxide dismutase 1, in PD/PK pathway for doxorubicin 
+#### no... GPX3 = glutathione peroxidase 3, doxorubicin, daunorubicin
+# DHRS13 (m)
+# CHST9 (f)
+
+# what about partial matches?
+# CYP3A4, SLC16A14 (partial SLC16A1), 
+
+# SLC3A1 - not included
+gene.info <- read.delim("~/Downloads/genes/genes.tsv")
+gene.info[gene.info$Has.Variant.Annotation=="Yes",]
+vips <- gene.info[gene.info$Is.VIP=="Yes",]
+siggenesMA[siggenesMA$gene %in% vips$Symbol,] 
+# ADRB2 = adrenoreceptor beta 2, target of asthma/hypertension/CHF drugs
+#    multiple variants in this, some associated with variable response to drugs
+#    up in males
+# CYP3A4  (f)
+# ABCB1 (m) - transporter, up in males
+
+```
+
+
+Forest plots
+- TODO label
+```{r}
+# y chromosome
+require('xlsx')
+studies <- read.xlsx("~/Documents/EMILY/Stanford/Coursework/stats211/project/LiverMAStudies.xlsx", 1)
+
+names(resList) <- studies$Accession[1:16]
+obj1 <- metaAnalyzeGene("1576", resList)
+obj1$slab <- sapply(studies$Accession[1:16], as.character)
+forest( obj1, main="CYP3A4") 
+obj2 <- metaAnalyzeGene("8653", resList)
+obj2$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj2, main="DDX3Y")
+
+obj3 <- metaAnalyzeGene("5243", resList)
+obj3$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj3, main="ABCB1")
+
+obj4 <- metaAnalyzeGene("154", resList)
+obj4$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj4, main="ADRB2")
+
+obj4 <- metaAnalyzeGene("154", resList)
+obj4$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj4, main="ADRB2")
+
+obj5 <- metaAnalyzeGene("6647", resList)
+obj5$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj5, main="SOD1")
+
+obj5 <- metaAnalyzeGene("6647", resList)
+obj5$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj5, main="SOD1")
+
+
+obj6 <- metaAnalyzeGene("147015", resList)
+obj6$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj6, main="DHRS13")
+
+obj7 <- metaAnalyzeGene("83539", resList)
+obj7$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj7, main="CHST9")
+
+obj8 <- metaAnalyzeGene("6647", resList)
+obj8$slab <- sapply(studies$Accession[1:16], as.character)
+forest(obj8, main="SOD1")
+
+
+# CYP3A4, other drug-related
+
+```
+
+
+HEATMAP
+```{r}
+require('gplots')
+siggenesMA.filt <- siggenesMA[siggenesMA$k >=14,]
+head(siggenesMA.filt)
+geneByStudy <- lapply(sapply(siggenesMA.filt$key, as.character), function(gene){
+  vals <- as.numeric(metaAnalyzeGene(gene, resList)$yi)
+  vals[which(vals > 1.5)] <-1.5
+  vals[which(vals < -1.5)] <- -1.5
+
+    present.studies <- which(sapply(1:16, function(x) gene %in% resList[[x]]$keys))
+  all.studies <- rep(0, 16)
+  all.studies[present.studies] <- vals
+
+  return(all.studies)
+})
+geneStudyTab <- do.call(rbind, geneByStudy)
+
+
+
+rownames(geneStudyTab) <- siggenesMA.filt$gene
+
+colnames(geneStudyTab) <- studies$Accession[1:16]
+short.beta <- siggenesMA.filt$beta
+short.beta[short.beta > 1.5] <- 1.5
+short.beta[short.beta < -1.5] <- -1.5
+
+geneStudyTab2 <- cbind(geneStudyTab, short.beta)
+colnames(geneStudyTab2)[17] <- c("combined")
+rotTab <- t(as.matrix(geneStudyTab2))
+new.order <- c(order(rowMeans(rotTab[1:16,])), 17)
+rotTab2 <- rotTab[new.order,]
+colOrder <- c(order(colMeans(rotTab[1:16,])))
+rotTab3 <- rotTab2[,order(short.beta)]
+
+siggenesMA.filt2 <- siggenesMA.filt
+rownames(siggenesMA.filt2) <- siggenesMA.filt2$gene
+siggenesMA.filt3 <- siggenesMA.filt2[colnames(rotTab3),]
+chromLoc2 <- ifelse(siggenesMA.filt3$chr =="Y", "red", ifelse(siggenesMA.filt3$chr=="X","blue", ifelse(siggenesMA.filt3$chr=="XY", "purple", "black")))
+
+heatmap.2(rotTab3, trace="none", Rowv=FALSE, Colv=FALSE, colCol=chromLoc2, margins = c(5,9), dendrogram="none") # 25 by 5 works best
+
+#heatmap.2(rotTab3[,c("CYP3A4", "CHST9", "SOD1", "ADRB2", "ABCB1")], trace="none", Rowv=FALSE, Colv=FALSE, margins=c(9,9))
+
+```
+
+

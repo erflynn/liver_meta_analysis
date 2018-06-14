@@ -1,0 +1,140 @@
+---
+title: "LiverMetaIntegratorCode"
+author: "E Flynn"
+date: "4/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load helper code
+```{r helpers}
+source("processing_utils.R")
+source("meta_utils.R")
+```
+Load + reformat data 
+```{r}
+
+
+# extract studies for MetaIntegrator - using function specifc for this
+resListMI <- lapply(c(1:16), extractStudyMI)
+
+names(resListMI) <- sapply(resListMI, function(x) x$formattedName)
+metaObj = list()
+metaObj$originalData <- resListMI
+checkDataObject(metaObj, "Meta", "Pre-Analysis")
+
+```
+```{r}
+metaObj <- runMetaAnalysis(metaObj)
+str(metaObj, max.level=2)
+metaObj <- filterGenes(metaObj, isLeaveOneOut=TRUE, FDRThresh = 0.05)
+
+filterRes <-summarizeFilterResults(metaObj, getMostRecentFilter(metaObj))
+
+# add labels
+upReg <- filterRes$pos
+downReg <- filterRes$neg
+upReg$key <- rownames(upReg)
+downReg$key <- rownames(downReg)
+upRegLabeled <- merge(upReg, json.df[json.df$key %in% upReg$key,])
+downRegLabeled <- merge(downReg, json.df[json.df$key %in% downReg$key,])
+
+write.csv(upRegLabeled, file="results/up_regulated.csv", row.names=FALSE, quote=FALSE)
+write.csv(downRegLabeled, file="results/down_regulated.csv", row.names=FALSE, quote=FALSE)
+
+## - look at overlap w/ pharmgkb genes
+gene.info <- read.delim("external_data/pharmgkb_genes.tsv")
+dim(gene.info)
+colnames(gene.info)
+gene.info[gene.info$Has.Variant.Annotation=="Yes",]
+vips <- gene.info[gene.info$Is.VIP=="Yes",]
+upRegLabeled$gene[upRegLabeled$gene %in% vips$Symbol] # ABCB1
+downRegLabeled$gene[downRegLabeled$gene %in% vips$Symbol]  # CYP3A4, SLC22A1
+downRegLabeled$key[downRegLabeled$gene %in% vips$Symbol] 
+
+dmets <- read.csv("../dmets.csv", colClasses="character")
+upRegLabeled$gene[upRegLabeled$gene %in% dmets$Gene.Symbol]
+downRegLabeled$gene[downRegLabeled$gene %in% dmets$Gene.Symbol]
+
+# look at how it compares to previous - fairly well
+sigResPrev <- read.csv("../results/sigTabBCATS2.csv", colClasses="character")
+length(intersect(sigResPrev$gene, upRegLabeled$gene) ) # 62 out of 92
+length(intersect(sigResPrev$gene, downRegLabeled$gene) ) # 79 out of 115  (total 141 out of 161)
+
+```
+
+```{r}
+# validation???
+
+require('limma')
+load("data/processed/ds17.RData")
+sig.keys.disc <- c(upReg$key, downReg$key) # 209
+sig.keys <- datasetInfo17$keys[(datasetInfo17$keys %in% sig.keys.disc)]
+length(sig.keys)
+ds17.sm <- datasetInfo17$expr[names(sig.keys),]
+sig.keys.in.both <- sig.keys.disc[sig.keys.disc  %in% sig.keys] # 202 out of 209
+# group by key
+ds17.sm.grouped <- do.call(rbind, lapply(sig.keys.in.both, function(x){
+  corres.keys <- names(sig.keys[sig.keys==x]);
+  if (length(corres.keys) == 1){
+    keep.row <- 1
+  } else{
+    keep.row <- which.max(abs(rowMeans(datasetInfo17$expr[corres.keys,])))
+  }
+  return(datasetInfo17$expr[corres.keys[keep.row],])
+} ))
+rownames(ds17.sm.grouped) <- sig.keys.in.both
+
+
+lm17 <- lmFit(ds17.sm.grouped) # only look at the data ID'd before
+lm17 <- eBayes(lm17)
+lm17.tab <- topTable(lm17, number=length(sig.keys.in.both))
+lm17.tab.cut <- lm17.tab[lm17.tab$adj.P.Val<0.05,]
+nrow(lm17.tab.cut) # 159 pass threshold (out of 202)
+head(lm17.tab.cut)
+
+# all in the proper direction
+upRegLabeled$validated <- sapply(upRegLabeled$key, function(x) ifelse((!x %in% sig.keys.in.both), "NA" , x %in% rownames(lm17.tab.cut)))
+downRegLabeled$validated <- sapply(downRegLabeled$key, function(x) ifelse((!x %in% sig.keys.in.both), "NA" , x %in% rownames(lm17.tab.cut)))
+table(upRegLabeled$validated) # 71 true, 19 false, 2 NA
+table(downRegLabeled$validated) # 88 true, 24 false, 3 NA
+
+write.csv(upRegLabeled, file="results/up_regulated.csv", row.names=FALSE, quote=FALSE)
+write.csv(downRegLabeled, file="results/down_regulated.csv", row.names=FALSE, quote=FALSE)
+
+```
+
+```{r}
+# make a heatmap, other plots
+
+# forest plots
+forestPlot(metaObj, "1576")
+forestPlot(metaObj, "6580")
+
+```
+
+Redo analysis with:
+1) discovery/validation breakdown - 10 discovery, 6 validation
+2) effect size filter
+
+```{r}
+
+discoveryStudies <- c(1:8, 15, 16) # justification - I want the largest 
+validationStudies <- c(9:14)
+metaObj2 = list()
+metaObj2$originalData <- resListMI[discoveryStudies]
+checkDataObject(metaObj2, "Meta", "Pre-Analysis")
+
+metaObj2 <- runMetaAnalysis(metaObj2)
+
+# this is erroring out - it cannot find meta.summaries anymore :/ 
+str(metaObj2, max.level=2)
+metaObj2 <- filterGenes(metaObj2, isLeaveOneOut=TRUE, FDRThresh = 0.05)
+ 
+filterRes2 <-summarizeFilterResults(metaObj2, getMostRecentFilter(metaObj2))
+
+
+```
