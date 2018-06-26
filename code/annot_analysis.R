@@ -137,3 +137,8 @@ drug.df <- rbind(a.drug[,1:7], g.drug2)
 
 ## write out the drug data 
 write.table(drug.df, file="data/annot/drug_exposures.tsv", sep="\t", row.names=FALSE, quote=FALSE)
+
+# -- add a column to the annotation data -- #
+#drug_data$Accession <- sapply(drug_data$Accession, convertArrayExpToGeoID)
+#annot_data$drug_exposure <- (annot_data$Accession %in% drug_data$Accession)
+#write.table(annot_data, file="annot_data_drug.tsv", sep="\t", quote=FALSE, row.names=FALSE)

@@ -60,18 +60,15 @@ loadEntrezAnnot <- function(gpl){
 
 loadBioconductorEntrez <- function(gpl){
   if (gpl == "GPL570"){
-    bioPackage <- 'hgu133plus2.db'
-    require(bioPackage)
+    require('hgu133plus2.db')
     x <- hgu133plus2ENTREZID
   }
   if (gpl == "GPL571"){
-    bioPackage <- 'hgu133a2.db'
-    require(bioPackage)
+    require('hgu133a2.db')
     x <- hgu133a2ENTREZID
   }
   if (gpl == "GPL96"){
-    bioPackage <- 'hgu133a.db'
-    require(bioPackage)
+    require('hgu133a.db')
     x <- hgu133aENTREZID
   }
 

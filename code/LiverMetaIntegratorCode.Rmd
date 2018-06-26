@@ -35,7 +35,7 @@ checkDataObject(metaObj, "Meta", "Pre-Analysis")
 metaObj <- runMetaAnalysis(metaObj)
 str(metaObj, max.level=2)
 metaObj <- filterGenes(metaObj, isLeaveOneOut=TRUE, FDRThresh = 0.05, effectSizeThresh = 0.3)
-
+save(metaObj, file="../data/metaObj.RData")
 filterRes <-summarizeFilterResults(metaObj, getMostRecentFilter(metaObj))
 # --> 74 negative, 60 positive
 
@@ -47,8 +47,8 @@ downReg$key <- rownames(downReg)
 upRegLabeled <- merge(upReg, json.df[json.df$key %in% upReg$key,])
 downRegLabeled <- merge(downReg, json.df[json.df$key %in% downReg$key,])
 
-write.csv(upRegLabeled, file="../results/up_regulated.csv", row.names=FALSE, quote=FALSE)
-write.csv(downRegLabeled, file="../results/down_regulated.csv", row.names=FALSE, quote=FALSE)
+write.csv(upRegLabeled, file="../results/up_regulatedv2.csv", row.names=FALSE, quote=FALSE)
+write.csv(downRegLabeled, file="../results/down_regulatedv2.csv", row.names=FALSE, quote=FALSE)
 
 ## - look at overlap w/ pharmgkb genes
 gene.info <- read.delim("../external_data/pharmgkb_genes.tsv")
@@ -70,11 +70,11 @@ downRegLabeled$gene[downRegLabeled$gene %in% dmets$Gene.Symbol]
 # validation???
 
 load("../data/processed/ds17.RData")
-sig.keys.disc <- c(upReg$key, downReg$key) # 209
+sig.keys.disc <- c(upReg$key, downReg$key) # 209 --> 134
 sig.keys <- datasetInfo17$keys[(datasetInfo17$keys %in% sig.keys.disc)]
 length(sig.keys)
 ds17.sm <- datasetInfo17$expr[names(sig.keys),]
-sig.keys.in.both <- sig.keys.disc[sig.keys.disc  %in% sig.keys] # 202 out of 209
+sig.keys.in.both <- sig.keys.disc[sig.keys.disc  %in% sig.keys] # 129 out of 134, was 202 out of 209
 # group by key
 ds17.sm.grouped <- do.call(rbind, lapply(sig.keys.in.both, function(x){
   corres.keys <- names(sig.keys[sig.keys==x]);
@@ -92,8 +92,9 @@ lm17 <- lmFit(ds17.sm.grouped) # only look at the data ID'd before
 lm17 <- eBayes(lm17)
 lm17.tab <- topTable(lm17, number=length(sig.keys.in.both))
 lm17.tab.cut <- lm17.tab[lm17.tab$adj.P.Val<0.05,]
-nrow(lm17.tab.cut) # 159 pass threshold (out of 202)
+nrow(lm17.tab.cut) # 117 out of 129   --- 159 pass threshold (out of 202)
 head(lm17.tab.cut)
+### - but what about effect size threshold???
 
 # all in the proper direction
 upRegLabeled$validated <- sapply(upRegLabeled$key, function(x) ifelse((!x %in% sig.keys.in.both), "NA" , x %in% rownames(lm17.tab.cut)))

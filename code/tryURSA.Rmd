@@ -1,0 +1,113 @@
+---
+title: "tryURSA.Rmd"
+author: "E Flynn"
+date: "6/17/2018"
+output: html_document
+---
+
+Code for trying URSA - first going to pre-process data so that I can upload it
+--> updated, now trying to run URSA at command line. 
+
+```{r}
+source("processing_utils.R")
+```
+
+Plus2 example - dataset 3
+  - MAKE SURE TO WRITE OUT W  ENTREZ
+```{r}
+gse38941 <- getGEOData("GSE38941")
+pData_ds3 <- gse38941$originalData$GSE38941$pheno
+pData_ds3.2 <- pData_ds3[pData_ds3$`disease state:ch1` == "normal",]
+normal3 <- rownames(pData_ds3.2)[1]
+expData_ds3 <- gse38941$originalData$GSE38941$expr
+ds3.keys <- loadEntrezAnnot("GPL570") # use these keys instead - needs to be ENTREZ
+
+#keys3 <- gse38941$originalData$GSE38941$keys
+
+expData_ds3.2 <- data.frame(cbind(unlist(ds3.keys), expData_ds3[names(ds3.keys),]))
+expData_ds3.2$V1 <-sapply(expData_ds3.2$V1, as.character)
+expData_ds3.3 <- separate_rows(expData_ds3.2, V1, sep=",")
+
+# make it numeric
+expData_ds3.3[,1:ncol(expData_ds3)] <- apply(expData_ds3.3[,1:ncol(expData_ds3)], c(1,2), as.numeric)
+
+# turn it into lists
+
+# turn it into batch
+
+# group by gene
+by_gene <- group_by(expData_ds3.3, V1)
+mult.cols <- summarise_all(by_gene, .funs=c(mean)) # summarize all
+mult.cols2 <- mult.cols[!is.na(mult.cols$V1),]
+
+# now write out for a batch
+mult.cols.rot <- data.frame(t(mult.cols2))
+colnames(mult.cols.rot) <- sapply(mult.cols.rot[1,], as.character)
+mult.cols.rot <- mult.cols.rot[-1,]
+
+
+pData_ds3$`disease state:ch1`
+write.table(mult.cols.rot[c(1:5, 20:25),], file="../tissue_data/liver_d3_batch.input", row.names=TRUE, col.names=TRUE, sep="\t", quote=FALSE) # five normal, five dz
+
+# write out for a list
+head(mult.cols2[,1:7])
+sapply(c(1:5, 20:25), function(x) write.table(mult.cols2[,c(1,x+1)], file=sprintf("../tissue_data/%s.input", colnames(mult.cols)[x+1]), row.names=FALSE, col.names=FALSE, quote=FALSE, sep="\t"))
+
+# write list file
+my.cols <- sapply(c(1:5, 20:25), function(x) colnames(mult.cols)[x+1])
+list.df <- cbind(data.frame(sapply(my.cols, function(x) paste(x, "input", sep="."))), data.frame(sapply(my.cols, function(x) paste(x, "output", sep="."))))
+write.table(list.df, file="../tissue_data/list_liver.txt", row.names=FALSE, col.names=FALSE, quote=FALSE, sep="\t")
+
+#oneCol <- summarise(by_gene, GSM952511=mean(GSM952511, na.rm=TRUE))
+#write.table(oneCol, file="../tissue_data/liver_ds3_normal.txt", col.names=FALSE, row.names=FALSE, sep="\t", quote=FALSE)
+
+
+```
+
+
+Trying to use GSE33116 (ds11) - breast cancer vs. liver:
+```{r}
+
+gse11 <- getGEOData("GSE33116")
+# Breast cancer and liver tissue biopsies used to develop and validate an index for liver contamination in metastatic breast cancer
+
+gse33116 <- gse11$originalData$GSE33116 
+pData_ds11 <- gse33116$pheno
+
+# breast cancer and liver biopsies
+table(pData_ds11$"tissue:ch1")
+
+# select two liver, two metastatic cancer, two mixture
+geo.liver <- pData_ds11[pData_ds11$"tissue:ch1"=="Liver biopsy",]$geo_accession[1:2]
+
+expData_ds11 <- gse33116$expr
+write.table(expData_ds11[,geo.liver[1]], file="../tissue_data/geo_liver.txt", sep="\t", quote=FALSE, row.names=TRUE)
+```
+
+
+Try dz vs. normal
+```{r}
+gse9 <- getGEOData("GSE89632")
+gse89632 <- gse9$originalData$GSE89632
+# Genome-wide analysis of hepatic gene expression in patients with non-alcoholic fatty liver disease  and in healthy donors in relation to hepatic fatty acid composition and other nutritional factors
+
+
+
+pData_ds9 <- gse89632$pheno
+#"characteristics_ch1.8"== "gender: female"
+#title=="liver_HC_HLD-47"
+healthy.donors <- sapply(pData_ds9$title, function(x) strsplit(as.character(x), "_", fixed=TRUE)[[1]][[2]]=="HC")
+pData_ds9.2 <- pData_ds9[healthy.donors,]
+gse89632$expr[,rownames(pData_ds9.2)[1]]
+write.table(gse89632$expr[,rownames(pData_ds9.2)[1]], file="../tissue_data/liver2")
+
+# bleh this is illumina --> switch to something that is plus2 for the mapping?
+# -OR- just use gene annotations? nah, I think I'll try something that *should* work - start with most trivial example possible?
+```
+
+Try cells vs. tissue
+```{r}
+
+```
+
+Try cell line vs. tissue
