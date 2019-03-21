@@ -1,0 +1,216 @@
+
+E Flynn
+8/8/2018
+
+Run GSEA w/ Hallmark gene sets
+
+NOTES:
+- fix conversion to symbols --> move it earlier
+- common utils!
+- made a mess trying to play with "same.dir=TRUE" and "same.dir=FALSE"
+  - figure out which is right!
+  - try to understand the up/down regulated results
+- the output plots - but it doesn't make sense
+- compare to the TCGA data <-- what did they use for enrichment score?
+- do I believe in their method?
+
+
+```{r}
+require('gage')
+require('plyr')
+require('miceadds')
+require('metap')
+require('humanFC')
+data("kegg.gs")
+
+
+loadReformatDat <- function(idx){
+  print(idx)
+  load.Rdata(sprintf("../data/processed/ds%s.RData", idx), "my.ds")
+  
+  expDat <-data.frame(my.ds$expr)
+  expDat$probe_id <- rownames(expDat)
+  keys2 <- my.ds$keys[rownames(expDat)]
+  probeGene <- stack(keys2)
+  colnames(probeGene) <- c("gene", "probe_id")
+  expDatv2 <- merge(expDat, probeGene, by="probe_id")
+  expDatv3 <- expDatv2[!is.na(expDatv2$gene),]
+  res2 <- aggregate(select(expDatv3,-probe_id, -gene), list(expDatv3$gene), mean, na.rm=TRUE) # this is where it was dying before
+  res2$probe_id <- NULL
+  rownames(res2) <- res2$Group.1
+  res2$Group.1 <- NULL
+  # this will lead to some many-to-many - mult rownames mapping to same gene
+  # here I am taking the average - may want to replace
+  my.list <- list(exp=res2, ref=which(my.ds$pheno=="male"), samp=which(my.ds$pheno=="female"))
+  return(my.list)
+}
+
+ds2 <- loadReformatDat(2)
+
+allDat <- lapply(c(8:16), loadReformatDat)
+allDat0 <- lapply(c(1:7), loadReformatDat)
+
+# load the hallmark gene set
+#devtools::install_github('oganm/MSigDB')
+require('MSigDB')
+
+
+hallmark.gs <- MSigDB$HALLMARK # these are gene symbols
+# convert to entrez?? - or convert my data to gene symbols
+
+convertToEntrez <- function(ds){
+  require('rjson')
+  
+  json_data <- fromJSON(paste(readLines("../external_data/symbols-human.json"), collapse=""))
+  json.df <- stack(json_data)
+  colnames(json.df) <- c("entrez", "gene")
+  json.df$entrez <- sapply(json.df$entrez, as.character)
+  #json.df2 <- json.df[json.df$key %in% rownames(ds),]
+  #key.to.gene <- (split(json.df2$gene, json.df2$key))
+  ds$entrez <- rownames(ds)
+  
+  ds2 <- inner_join(ds, json.df, by="entrez")
+  ds3 <- ds2[!is.na(ds2$gene),]
+  ds4 <- aggregate(select(ds3, -entrez, -gene), list(ds3$gene), mean, na.rm=TRUE)
+  rownames(ds4) <- ds4$Group.1
+  return(select(ds4, -Group.1))
+
+}
+
+computeEnrich <- function(ds.obj, gsc){
+  enrich <- gage(convertToEntrez(ds.obj$exp), gsets=gsc, ref=ds.obj$ref, samp=ds.obj$samp, compare="as.group", same.dir=TRUE, saaTest=gs.KSTest)
+  return(enrich)
+}
+
+res <- computeEnrich(allDat0[[1]], hallmark.gs)
+enriched0.k <- lapply(allDat0, function(ds) computeEnrich(ds, hallmark.gs))
+enriched.k <- lapply(allDat, function(ds) computeEnrich(ds, hallmark.gs))
+
+# I should just map this all once + earlier
+
+combine.p.vals <- function(my.dat, gsc){
+  ## TODO: deduplicate
+  greater <- data.frame(do.call(rbind, lapply(names(gsc), function(x) {
+    list.p <- sapply(my.dat, function(ds) ds$greater[x,"p.val"]); 
+    list.p2 <- list.p[!is.na(list.p)];
+    if (length(list.p2) < 2){return("NA")}
+    else{ 
+      list.ps <- unlist(list.p2)[order(unlist(list.p2))];
+      rth.rank <- list.ps[round(0.3*length(list.ps))] # 7th
+      return(rth.rank )
+    }
+  })))
+  colnames(greater) <- "combined.p"
+  rownames(greater) <- names(gsc)
+  greater$label <- rownames(greater)
+  greater$combined.p <- sapply(greater$combined.p, function(x) as.numeric(as.character(x)))
+  greater <- greater[order(greater$combined.p),]
+ less <- data.frame(do.call(rbind, lapply(names(gsc), function(x) {
+    list.p <- sapply(my.dat, function(ds) ds$less[x,"p.val"]); 
+    list.p2 <- list.p[!is.na(list.p)];
+    if (length(list.p2) < 2){return("NA")}
+    else{ 
+      list.ps <- unlist(list.p2)[order(unlist(list.p2))];
+      rth.rank <- list.ps[round(0.3*length(list.ps))] # 7th
+      return(rth.rank )
+    }
+  })))
+ colnames(less) <- "combined.p"
+ rownames(less) <- names(gsc)
+ less$label <- rownames(less)
+ 
+ less$combined.p <- sapply(less$combined.p, function(x) as.numeric(as.character(x)))
+ less <- less[order(less$combined.p),]
+ return(list("greater"=greater, "less"=less))
+}
+
+# combine.p.vals <- function(my.dat, gsc){
+#   ## TODO: deduplicate
+#   greater <- data.frame(do.call(rbind, lapply(names(gsc), function(x) {
+#     list.p <- sapply(my.dat, function(ds) ds$greater[x,"p.val"]); 
+#     list.p2 <- list.p[!is.na(list.p)];
+#     if (length(list.p2) < 2){return("NA")}
+#     else{ 
+#       list.ps <- unlist(list.p2)[order(unlist(list.p2))];
+#       rth.rank <- list.ps[round(0.3*length(list.ps))] # 7th
+#       return(rth.rank )
+#     }
+#   })))
+#   colnames(greater) <- "combined.p"
+#   rownames(greater) <- names(gsc)
+#   greater$label <- rownames(greater)
+#   greater$combined.p <- sapply(greater$combined.p, function(x) as.numeric(as.character(x)))
+#   greater <- greater[order(greater$combined.p),]
+# 
+#  return(list("greater"=greater))
+# }
+
+# what is going on w these data?
+head(enriched0.k)
+h.enrichment <- combine.p.vals(c(enriched0.k, enriched.k), hallmark.gs)
+head(h.enrichment$greater)
+pval.cut <- 0.05/(length(hallmark.gs))
+
+keep.greater.h <- rownames(h.enrichment$greater)[h.enrichment$greater$combined.p < pval.cut]
+keep.less.h <- rownames(h.enrichment$less)[h.enrichment$less$combined.p < pval.cut]
+keep.greater.h <- keep.greater.h[!is.na(keep.greater.h)]
+keep.less.h <-keep.less.h[!is.na(keep.less.h)]
+
+
+# make a heatmap
+
+study.tab.up <- do.call(rbind, lapply(c(enriched0.k, enriched.k), function(x) x$greater[,"p.val"]))
+rownames(study.tab.up) <- c(1:16)
+  
+study.tab.down <- do.call(rbind, lapply(c(enriched0.k, enriched.k), function(x) x$less[,"p.val"]))
+rownames(study.tab.down) <- c(1:16)
+
+
+
+log10p.up <- apply(study.tab.up, c(1,2), function(x) -log10(as.numeric(x)))
+log10p.down <- apply(study.tab.down, c(1,2), function(x) -log10(as.numeric(x)))
+log10.up.df <- log10p.up[,c(keep.greater.h)]
+log10.down.df <- log10p.down[,c(keep.less.h)]
+log10.down.df <- apply(log10.down.df, c(1,2), function(x) x*(-1))
+logdf.combined <- cbind(log10.up.df, log10.down.df)
+logdf.combined2 <- logdf.combined
+logdf.combined2 <- apply(logdf.combined, c(1,2), function(x) ifelse(x > 8, 8, ifelse(x < -8, -8, x)))
+require('gplots')
+heatmap.2(t(log10.up.df[,order(colnames(log10.up.df))]), Rowv=FALSE, Colv=FALSE, trace="none", dendrogram="none", margins=c(9,18))
+greater.p <- h.enrichment$greater$combined.p
+names(greater.p) <- rownames(h.enrichment$greater)
+p.log.greater <- sapply(greater.p[c(keep.greater.h)], function(x) -log10(as.numeric(as.character(x))))
+
+less.p <- h.enrichment$less$combined.p
+names(less.p) <- rownames(h.enrichment$less)
+
+p.log.less <- sapply(less.p[c(keep.less.h)], function(x) log10(as.numeric(as.character(x))))
+pooled.est <- data.frame(t(c(p.log.greater, p.log.less)))
+colnames(pooled.est) <- c(keep.greater.h, keep.less.h)
+logdf.combined3 <- rbind(logdf.combined2, pooled.est)
+rownames(logdf.combined3)[17] <- "combined"
+
+# enriched in females vs. males = greater
+# enriched in males vs. females = less
+
+logdf.combined4 <- rbind(logdf.combined2, pooled.est)
+rownames(logdf.combined4)[17] <- "combined"
+heatmap.2(t(logdf.combined4[,c(keep.greater.h)]), Rowv=FALSE, Colv=FALSE, dendrogram="none", trace="none", margins=c(9,20))
+
+heatmap.2(t(logdf.combined4[,c(keep.less.h)]), Rowv=FALSE, Colv=FALSE, dendrogram="none", trace="none", margins=c(9,20))
+
+colnames(logdf.combined3) <- sapply(colnames(logdf.combined3), function(x) {y <- strsplit(x, "_")[[1]]; z<- paste(y[2:length(y)], collapse="_"); return(z)})
+heatmap.2(t(logdf.combined3[,order(colnames(logdf.combined3))]), Rowv=FALSE, Colv=FALSE, dendrogram="none", trace="none", margins=c(9, 15))
+
+
+## need to just do once - males vs females
+# - instead of BOTH
+
+
+```
+
+
+
+# try to run MetaDCN
+
+

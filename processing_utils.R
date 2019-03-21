@@ -24,13 +24,16 @@ require('illuminaio')
 
 
 # identify the y chromosome genes using Entrez
-# ensembl.m <- useMart("ensembl") #ENSEMBL_MART_ENSEMBL", host="asia.ensembl.org", verbose=T) #, dataset = "hsapiens_gene_ensembl") #, host="archive.ensembl.org")
-# listDatasets(ensembl.m)
-#ensembl <- useDataset("hsapiens_gene_ensembl", mart=ensembl.m) # strange - did not load at first :/ --> sometimes have to load this twice
-# 
+ensembl <- useMart("ensembl", dataset="hsapiens_gene_ensembl") 
+# # 
 # ychr.genesEntrez <- getBM(attributes= "entrezgene",
-#                      filters=c("chromosome_name"),
+#                     filters=c("chromosome_name"),
 #                      values=list("Y"), mart=ensembl) 
+ychr.genes <- getBM(attributes= "hgnc_symbol",
+                         filters=c("chromosome_name"), values=list("Y"), mart=ensembl) 
+
+# Load the y chromosome genes in Entrez --> save these permanently
+
 
 loadAffyData <- function(cel.names, ID){
   covdesc <- data.frame(row.names = cel.names)
@@ -55,6 +58,7 @@ loadEntrezAnnot <- function(gpl){
   }
   else {
     # FILL IN
+    print(sprintf("Error, %s not implemented yet", gpl))
   }
 }
 
@@ -90,6 +94,17 @@ loadGPL11532EntrezAnnot <- function(){
   return(keys.vec)
 }
 
+loadGPL11532SymbolAnnot <- function(){
+  gpl11532 <- getGEO(filename="data/annot/GPL11532.annot.gz")
+  colnames(Table(gpl11532))
+  feat.labels <- data.frame(apply(Table(gpl11532)[,c("ID", "Gene symbol")], c(1,2), as.character))
+  feat.labelssep <- separate_rows(feat.labels[,c(1,2)], "Gene.symbol", sep="///")
+  keys.vec <- sapply(feat.labelssep$`Gene.symbol`, as.character)
+  names(keys.vec) <- sapply(feat.labelssep$ID, as.character)
+  return(keys.vec)
+}
+
+
 loadGPL4133EntrezAnnot <- function(){
   res <- read.delim("../data/agilent/GPL4133-12599.txt", comment.char="#", header=TRUE, colClasses='character')
   res.df <- res[,c("ID", "GENE")]
@@ -105,10 +120,6 @@ getIlluminaKeys <- function(geo.id, file.name){
   return(my.vec)
 }
 
-
-# maybe pre-process?
-
-# FIND A WAY TO MAP TO ENSEMBL
 
 
 
@@ -140,63 +151,58 @@ labelSex <- function(expData, ds.keys, ychr.genes, threshold=3, plot=TRUE){
     massi_cluster_plot(massi.select.out, results) # looks good!
   }
   
-  return(sample.results)
+  sexLabels <- sample.results$sex
+  names(sexLabels) <- sample.results$ID
+  
+  return(sexLabels)
 }
 
 sanityCheckSexLabels <- function(expData, keys.vec, sex.labels){
-  xist.probe <- names(keys.vec)[as.vector(keys.vec)=="7503"] # XIST, ENSG00000229807
+  keys.vec <- keys.vec[!is.na(keys.vec)]
+  xist.probe <- names(keys.vec)[as.vector(keys.vec)=="XIST"] # XIST, ENSG00000229807
   print(xist.probe)
   xist.vals <- expData[xist.probe,]
-  if (length(xist.probe)> 1){
-    xist.vals <- rowMeans(xist.vals, na.rm=TRUE)
-  }
-  rps4y1.probe <- names(keys.vec)[as.vector(keys.vec)=="6192"] # RPS4Y1, ENSG00000129824
+  if (length(xist.probe)> 1){ xist.vals <- rowMeans(xist.vals, na.rm=TRUE)}
+  rps4y1.probe <- names(keys.vec)[as.vector(keys.vec)=="RPS4Y1"] # RPS4Y1, ENSG00000129824
   print(rps4y1.probe)
-  plot(xist.vals, expData[rps4y1.probe,], # TAKE MEANS!
+  rpys4y1.vals <- expData[rpsy41.probe,]
+  if (length(rps4y1.probe)> 1){ rps4y1.vals <- rowMeans(rps4y1.vals, na.rm=TRUE)}
+  
+  plot(xist.vals, rpsy41.vals,
        col=ifelse(sex.labels=="female", "red", "blue"), ylab="RPS4Y1", xlab="XIST")  
 }
 
-sexLabelMissing <- function(expData, keys.vec){
-  xist.probe <- names(keys.vec)[as.vector(keys.vec)=="7503"] # XIST, ENSG00000229807
-  print(xist.probe)
-  rps4y1.probe <- names(keys.vec)[as.vector(keys.vec)=="6192"] # RPS4Y1, ENSG00000129824
-  print(rps4y1.probe)
+
+
+extractStudyMI <- function(idx){
+  print(idx)
+  load.Rdata(sprintf("data/processed/ds%s.RData", idx), "my.ds")
   
-  # y chromosome probes
+  # this is based on MetaIntegrator
+  # dataset object contains:
+  #   expr = expression matrix, rownames are probe IDs, colnames are samples
+  #   pheno = list of sex labels, names are column names
+  #   keys = named list of key values 
+  #   summ = effect summaries (if calculated)
+  #   ID = geo/arrayexpress identifier
   
-}
-
-
-# format into a dataset object
-
-# META-ANALYSIS
-# - using Ensembl IDs (??)
-# - fixed effects within gene
-
-
-
-summarizeGene <- function(key, es){
-  es.g <- es[!is.na(es$keys) & es$keys==key,]
-  if (nrow(es.g) > 1){
-    g.summ <- rma(yi =g, sei=se.g, dat=es.g, measure="SMD", method="FE")
-    res <- c("g"=g.summ$b, "se.g"=g.summ$se)
-  }
-  else {
-    res <- c("g"=es.g$g, "se.g"=es.g$se.g)
-  }
-  return(res)
-}
-
-
-metaAnalyzeGene <- function(key, ds.list, method="DL"){
+  # TODO: check that this matches labels on data  
+  sexLabels <- my.ds$pheno$sexLabels 
+  names(sexLabels) <- colnames(my.ds$expr)
   
-  # check that gene is in all!
+  # convert sexLabels to classes: 0 is female
+  classes <- sapply(sexLabels, function(x) ifelse(as.character(x)=="female", 0, 1))
+  names(classes) <- colnames(my.ds$expr) 
   
-  gene.sum <- data.frame(do.call(rbind, lapply(ds.list, function(x) summarizeGene(key, x))))
-  sum.res <- rma( yi=g, sei=se.g, dat=gene.sum, measure="SMD", method=method)
-  return(sum.res)
-  #return(list("key"=key, "g"=sum.res$b, "se.g"=sum.res$se, "p"=sum.res$pval,
-  #            "ci.lb"=sum.res$ci.lb, "ci.ub"=sum.res$ci.ub, "tau2"=sum.res$tau2, "se.tau2"=sum.res$se.tau2, 
-  #            "I2"=sum.res$I2, "H2"=sum.res$H2, "R2"=sum.res$R2)) ### TODO EXTRACT MORE - INCLUDING pval, heterogeneity!!!
-  
+  # create a study object
+  # remove rows that do not have any mapping
+  expMat <- my.ds$expr[rownames(my.ds$expr) %in% names(my.ds$keys),]
+  my.ds$expr <- as.matrix(expMat)
+  my.ds$keys <- sapply(my.ds$keys[rownames(expMat)], as.character)
+  my.ds$pheno <- data.frame(sexLabels)
+  my.ds$class <- classes
+  #study <- list("expr"=as.matrix(expMat), "class"=classes, "keys"=sapply(my.ds$keys[rownames(expMat)], as.character), 
+  #              "formattedName"=my.ds$ID, "pheno"=data.frame(sexLabels))
+  stopifnot(checkDataObject(my.ds, "Dataset"))
+  return(my.ds)
 }

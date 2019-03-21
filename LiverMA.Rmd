@@ -1,0 +1,182 @@
+### LiverMA.Rmd
+### E Flynn
+### Created: March 2018
+### Last Updated: November 2018
+
+
+```{r, message=FALSE, warning=FALSE}
+require('MetaIntegrator')
+require('miceadds')
+require('reshape2')
+require('biomaRt')
+require('gridExtra')
+require('gplots')
+
+source("processing_utils.R")
+```
+
+Load the data
+```{r}
+resListMI <- lapply(sapply(c(1:16), function(x) paste(x, "g", sep="")), extractStudyMI)
+
+names(resListMI) <- sapply(resListMI, function(x) x$formattedName)
+
+```
+
+
+
+Divide into discovery + validation
+- need only 300 for discovery
+- leave 9588
+- try leaveOneOut
+```{r}
+discoveryStudies <- c(1:7, 9:11) # 434
+validationStudies <- c(8, 12:16) # put 8 in validation because it is one of the largest!
+
+metaObj <- list()
+metaObj$originalData <- resListMI[names(resListMI)[discoveryStudies]]
+checkDataObject(metaObj, "Meta", "Pre-Analysis")
+
+metaObjv <- list()
+metaObjv$originalData <- resListMI[names(resListMI)[validationStudies]]
+checkDataObject(metaObjv, "Meta", "Pre-Analysis")
+
+
+metaObj <- runMetaAnalysis(metaObj)
+metaObjv <- runMetaAnalysis(metaObjv)
+save(metaObj, metaObjv, file="data/results/metaResults_0925.RData")
+
+```
+
+
+Check Distribution of Effect Sizes
+(Separated out + zoomed in for clarity!)
+```{r}
+ggplot(melt(metaObj$metaAnalysis$datasetEffectSizes[,1:3], 
+        varnames = c("Gene", "Study")), aes_string(x = "value", 
+        colour = "Study")) + geom_density(size = 1.1) + theme_bw() + 
+        scale_color_discrete(name = "Dataset") + xlim(-3,3) # concerned about GSE38941... Wider than normal
+ggplot(melt(metaObj$metaAnalysis$datasetEffectSizes[,4:6], 
+        varnames = c("Gene", "Study")), aes_string(x = "value", 
+        colour = "Study")) + geom_density(size = 1.1) + theme_bw() + 
+        scale_color_discrete(name = "Dataset")+ xlim(-3,3)
+ggplot(melt(metaObj$metaAnalysis$datasetEffectSizes[,7:10], 
+        varnames = c("Gene", "Study")), aes_string(x = "value", 
+        colour = "Study")) + geom_density(size = 1.1) + theme_bw() + 
+        scale_color_discrete(name = "Dataset")+ xlim(-3,3)
+```
+
+```{r}
+ggplot(melt(metaObjv$metaAnalysis$datasetEffectSizes[,1:3], 
+        varnames = c("Gene", "Study")), aes_string(x = "value", 
+        colour = "Study")) + geom_density(size = 1.1) + theme_bw() + 
+        scale_color_discrete(name = "Dataset")+ xlim(-3,3) # GSE9588 looks narrow, other two look a little wide...
+ggplot(melt(metaObjv$metaAnalysis$datasetEffectSizes[,4:6], 
+        varnames = c("Gene", "Study")), aes_string(x = "value", 
+        colour = "Study")) + geom_density(size = 1.1) + theme_bw() + 
+        scale_color_discrete(name = "Dataset")+ xlim(-3,3) # E-MEXP-3291 looks a little wide
+```
+Most of the effect sizes look mostly normal and symmetric, but a few are a little wide, and one is a little narrow. 
+
+
+Filter the resulting genes by FDR and and effect size. 
+```{r}
+metaObj <- filterGenes(metaObj, isLeaveOneOut = TRUE, effectSizeThresh=0.3, FDRThresh = 0.2, numberStudiesThresh = 2)
+metaObj <- filterGenes(metaObj, isLeaveOneOut = FALSE, effectSizeThresh=0.4, FDRThresh = 0.05, numberStudiesThresh = 2)
+metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0$posGeneNames # up in males
+metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0$negGeneNames # up in females
+
+metaRes <- summarizeFilterResults(metaObj, "FDR0.2_es0.3_nStudies2_looaTRUE_hetero0")
+save(metaRes, file="data/results/metaSig_1107.RData")
+```
+
+Check the separation of classes in the validation - it looks good (this is to be expected).
+```{r}
+filtRes <-metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0
+p1 <- violinPlot(filtRes, metaObjv$originalData$GSE9588, labelColumn = 'sexLabels')
+p2 <- violinPlot(filtRes, metaObjv$originalData$GSE33814, labelColumn = 'sexLabels')
+p3 <- violinPlot(filtRes, metaObjv$originalData$GSE48452, labelColumn = 'sexLabels')
+p4 <- violinPlot(filtRes, metaObjv$originalData$E.MEXP.3291, labelColumn = 'sexLabels')
+p5 <- violinPlot(filtRes, metaObjv$originalData$GSE25935, labelColumn = 'sexLabels')
+p6 <- violinPlot(filtRes, metaObjv$originalData$GSE28893, labelColumn = 'sexLabels')
+
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow=2)
+```
+
+Look at a couple of the results as forest plots
+```{r}
+forestPlot(metaObj, "CYP3A4") 
+forestPlot(metaObj, "ABCB1") 
+```
+
+Add the chromosome location + gene name
+```{r}
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+pos.genes <- metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0$posGeneNames
+neg.genes <- metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0$negGeneNames
+sig.genes <- c(pos.genes, neg.genes)
+mapping.table <- getBM(c('hgnc_symbol','chromosome_name', 'entrezgene'), "hgnc_symbol",sig.genes, mart=ensembl)
+mapping.table2 <- mapping.table[mapping.table$chromosome_name %in% c(1:22, "X", "Y"),] # remove the two patch ones
+table(mapping.table2$chromosome_name)
+```
+
+Plot effect size vs. chromosome!
+```{r}
+sigGenes <- rbind(metaRes$pos, metaRes$neg)
+sigGenes <- sigGenes[!duplicated(sigGenes),]
+sigGenes$hgnc_symbol <- rownames(sigGenes)
+geneChrES <- full_join(select(sigGenes, effectSize, hgnc_symbol), mapping.table2)
+geneChrES$chr_type <- sapply(geneChrES$chromosome_name, function(x) ifelse(x == "X", "X", ifelse(x=="Y", "Y", "A")))
+
+# order by effect size for visualization
+geneChrES2 <- geneChrES[order(geneChrES$effectSize),]
+geneChrES2$hgnc_symbol <-factor(geneChrES2$hgnc_symbol, levels=unique(geneChrES2$hgnc_symbol[order(geneChrES2$effectSize)]))
+
+ggplot(geneChrES2, aes(y=effectSize, x=hgnc_symbol, fill=chr_type))+ geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+Heatmaps using R package
+```{r}
+heatmapPlot(metaObj, metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0 )
+heatmapPlot(metaObjv, metaObj$filterResults$FDR0.2_es0.3_nStudies2_looaTRUE_hetero0 )
+```
+
+
+Make a custom heatmap that displays gene names and includes discovery and validation and combined effect size.
+```{r}
+# format the effect size data from the discovery and validation
+siggenesMA.filt <- sigGenes[sigGenes$numStudies >=8,]
+geneStudyTab <- cbind(metaObj$metaAnalysis$datasetEffectSizes[rownames(siggenesMA.filt),], metaObjv$metaAnalysis$datasetEffectSizes[rownames(siggenesMA.filt),])
+rownames(geneStudyTab) <- rownames(siggenesMA.filt)
+
+colnames(geneStudyTab) <- c(names(metaObj$originalData), names(metaObjv$originalData))
+short.beta <- siggenesMA.filt$effectSize # add the overall effect size
+
+# put together and rotate
+geneStudyTab2 <- cbind(geneStudyTab, short.beta)
+colnames(geneStudyTab2)[16] <- c("combined")
+rotTab <- t(as.matrix(geneStudyTab2))
+new.order <- c(order(rowMeans(rotTab[1:15,])), 16)
+rotTab2 <- rotTab[new.order,]
+colOrder <- c(order(colMeans(rotTab[1:15,])))
+rotTab3 <- rotTab2[,order(short.beta)]
+
+# truncate the effect size for visualization purposes
+rotTab3[rotTab3 > 1.5] <- 1.5
+rotTab3[rotTab3 < -1.5] <- -1.5
+
+# color the gene label by its chromosome location
+siggenesMA.filt2 <- siggenesMA.filt
+rownames(siggenesMA.filt2) <- siggenesMA.filt2$gene
+siggenesMA.filt3 <- siggenesMA.filt2[colnames(rotTab3),]
+chromLoc2 <- ifelse(siggenesMA.filt3$chr =="Y", "red", ifelse(siggenesMA.filt3$chr=="X","blue", ifelse(siggenesMA.filt3$chr=="XY", "purple", "black")))
+
+# plot the heatmap
+heatmap.2(rotTab3, trace="none", Rowv=FALSE, Colv=FALSE, colCol=chromLoc2, margins = c(5,9), dendrogram="none")
+
+```
+
+
+

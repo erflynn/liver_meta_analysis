@@ -1,3 +1,6 @@
+# Code for loading and extracting sex labels for each of the datasets.
+# E Flynn
+# Last Updated: November 2018
 
 source('code/processing_utils.R')
 

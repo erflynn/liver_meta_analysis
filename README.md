@@ -1,27 +1,18 @@
----
-title: "README.md"
-author: "E Flynn"
-date: "4/27/2018"
-output: html_document
----
-
-Human liver meta-analysis project. 
+# "README.md"
+### author: "E Flynn"
+### date: "4/27/2018"
 
 
-TODOs:
-- validation data?
-- clean up pre-processing code
-  - add in more stopifnots, etc to make sure mapping is good
-  - more tidyverse!
-- platform gene-name synonyms - I think we're not as up to date as we could be
-- double check on the one-to-many + many-to-many
-- clean up utils
-- how many of the packages do we actually need
-- add readmes for data directories - what data is here? how did we get it?
+#### Human liver meta-analysis project. 
 
-- first study?
-- studies with n=4, n=6... what to do?
+Performs Meta-analysis of liver expression data.
 
-- obesity studies...
 
-- apply to drug-labeled data
+The directory `search_code` contains the code that was used for searching GEO and processing the search results.
+* The results of this are located in `data/search_res`
+
+The data was pre-processed using the file: `load_extract_sex_label.R`. Briefly, each dataset was downloaded, filtered for normal liver samples, expression data normalized and mapped to genes, and sex labels extracted. 
+* This results in the files ds1g - ds17g.RData located in `data/processed/`
+* Each of these files contains an .RData object with a particular processed dataset.
+
+The bulk of the analysis is then done using: `LiverMA.Rmd`.
